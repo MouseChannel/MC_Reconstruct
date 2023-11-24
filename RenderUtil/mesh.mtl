@@ -8,6 +8,6 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.450000
 d 1.000000
 illum 1
-map_Kd D:/project/nerf/nvdiffmodeling/out/spot/mesh/texture_kd.png
-map_Ks D:/project/nerf/nvdiffmodeling/out/spot/mesh/texture_ks.png
-map_Bump D:/project/nerf/nvdiffmodeling/out/spot/mesh/texture_n.png
+map_Kd /mocheng/MC_Reconstruct/RenderUtil/texture_kd.png
+map_Ks /mocheng/MC_Reconstruct/RenderUtil/texture_kd.png
+map_Bump /mocheng/MC_Reconstruct/RenderUtil/texture_kd.png

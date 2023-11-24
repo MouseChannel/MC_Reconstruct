@@ -1,0 +1,4 @@
+{
+  "base_mesh": "data/sphere.obj",
+  "ref_mesh": "data/mocheng.obj"
+}

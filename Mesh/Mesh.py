@@ -42,6 +42,10 @@ class Mesh:
             self.v_pos = v_pos
             # return Mesh(  v_pos, base=mesh)
 
+    def to_be_trainable(self):
+        self.v_pos.requires_grad_(True)
+        self.uvs.requires_grad_(True)
+
     def compute_tangents(self):
 
         vn_idx = [None] * 3
@@ -89,6 +93,5 @@ class Mesh:
         if torch.is_anomaly_enabled():
             assert torch.all(torch.isfinite(tangents))
 
- 
-
- 
+    def auto_nrm(self):
+        return

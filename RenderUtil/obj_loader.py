@@ -14,9 +14,11 @@ import torch
 from Material import Util, Material, Texture2D
 from Mesh import Mesh
 from Object import GameObject
-import Render_Util
 
-from cvtest import mycvtest
+
+# import Render_Util
+
+# from cvtest import mycvtest
 
 
 # from . import util
@@ -53,33 +55,15 @@ def _find_mat(materials, name):
 
 
 def load_obj(filename):
-    obj_path = os.path.dirname(filename)
-    # Read entire file
+    mesh = load_obj_mesh(filename)
+    material = load_obj_material(filename)
+
+    return GameObject.Gameobject(mesh, material)
+
+
+def load_obj_mesh(filename):
     with open(filename) as f:
         lines = f.readlines()
-
-    # # Load materials
-    # all_materials = [
-    #     {
-    #         'name' : '_default_mat',
-    #         'bsdf' : 'falcor',
-    #         'kd'   : texture.Texture2D(torch.tensor([0.5, 0.5, 0.5], dtype=torch.float32, device='cuda')),
-    #         'ks'   : texture.Texture2D(torch.tensor([0.0, 0.0, 0.0], dtype=torch.float32, device='cuda'))
-    #     }
-    # ]
-
-    materials = []
-    for line in lines:
-        if len(line.split()) == 0:
-            continue
-        if line.split()[0] == 'mtllib':
-            materials = Util.load_mtl(os.path.join(obj_path, line.split()[1]))  # Read in entire material library
-            break
-        # else:
-        #     raise RuntimeError('no mtllib_file in obj')
-    # else:
-    #     all_materials += material.load_mtl(mtl_override)
-    assert len(materials) > 0
     # load vertices
     vertices, texcoords, normals = [], [], []
     for line in lines:
@@ -105,7 +89,7 @@ def load_obj(filename):
 
         prefix = line.split()[0].lower()
         if prefix == 'usemtl':  # Track used materials
-            mat = _find_mat(materials, line.split()[1])
+            # mat = _find_mat(materials, line.split()[1])
             # if not mat in used_materials:
             #     used_materials.append(mat)
             # activeMatIdx = used_materials.index(mat)
@@ -145,19 +129,39 @@ def load_obj(filename):
     faces = torch.tensor(faces, dtype=torch.int64, device='cuda')
     tfaces = torch.tensor(tfaces, dtype=torch.int64, device='cuda') if texcoords is not None else None
     nfaces = torch.tensor(nfaces, dtype=torch.int64, device='cuda') if normals is not None else None
+    return Mesh.Mesh(vertices, faces, normals, nfaces, texcoords, tfaces)
 
-    # Read weights and bones if available
-    try:
-        v_weights = torch.tensor(np.load(os.path.splitext(filename)[0] + ".weights.npy"), dtype=torch.float32,
-                                 device='cuda')
-        bone_mtx = torch.tensor(np.load(os.path.splitext(filename)[0] + ".bones.npy"), dtype=torch.float32,
-                                device='cuda')
-    except:
-        v_weights, bone_mtx = None, None
 
-    mesh = Mesh.Mesh(vertices, faces, normals, nfaces, texcoords, tfaces)
-    material = materials[0]
-    material = Material.Material(material['kd'], material['ks'], material['normal'])
-    return GameObject.Gameobject(mesh, material)
- 
- 
+def load_obj_material(filename):
+    obj_path = os.path.dirname(filename)
+
+    with open(filename) as f:
+        lines = f.readlines()
+    # # Load materials
+    # all_materials = [
+    #     {
+    #         'name' : '_default_mat',
+    #         'bsdf' : 'falcor',
+    #         'kd'   : texture.Texture2D(torch.tensor([0.5, 0.5, 0.5], dtype=torch.float32, device='cuda')),
+    #         'ks'   : texture.Texture2D(torch.tensor([0.0, 0.0, 0.0], dtype=torch.float32, device='cuda'))
+    #     }
+    # ]
+
+    materials = []
+    for line in lines:
+        if len(line.split()) == 0:
+            continue
+        if line.split()[0] == 'mtllib':
+            materials = Util.load_mtl(os.path.join(obj_path, line.split()[1]))  # Read in entire material library
+            break
+        # else:
+        #     raise RuntimeError('no mtllib_file in obj')
+    # else:
+    #     all_materials += material.load_mtl(mtl_override)
+    if len(materials) == 0:
+        print(filename, 'has no material')
+        return None
+    else:
+        print(filename, 'has material')
+        material = materials[0]
+        return Material.Material(material['kd'], material['ks'], material['normal'])

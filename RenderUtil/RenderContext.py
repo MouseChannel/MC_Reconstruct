@@ -1,11 +1,11 @@
 import nvdiffrast.torch as dr
 import torch
-import Mesh.Mesh
-import Material.Texture2D
-import BSDF
-import Render_Util
 
-from cvtest import mycvtest
+from RenderUtil import BSDF
+from RenderUtil import Render_Util
+
+
+# from cvtest import mycvtest
 
 
 class RenderContext:
@@ -64,10 +64,17 @@ class RenderContext:
                             v_pos_clip,
                             fixed_mesh.pos_faces.int(),
                             [width, height]) as peeler:
+            data = torch.tensor([],device='cuda')
             for _ in range(num_layers):
                 rast, rast_dp = peeler.rasterize_next_layer()
-                return self.render_single_layer(rast, rast_dp, fixed_mesh, gameobject.material, view_pos, light_pos,
-                                                light_power)
+                data = torch.cat([data, self.render_single_layer(rast,
+                                                                 rast_dp,
+                                                                 fixed_mesh,
+                                                                 gameobject.material,
+                                                                 view_pos,
+                                                                 light_pos,
+                                                                 light_power)], 0)
+            return data
 
 
 render_context = RenderContext()
