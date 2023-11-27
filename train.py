@@ -14,7 +14,7 @@ from RenderUtil import obj_loader, Render_Util, RenderContext
 from RenderUtil.CameraHelper import get_random_camera_mvp, get_random_camera_pos
 
 
-def main():
+def main(): 
     parser = argparse.ArgumentParser(description='diffmodeling')
     parser.add_argument('-i', '--iter', type=int, default=5000)
     parser.add_argument('--config', type=str, default=None, help='Config file')
@@ -50,6 +50,9 @@ def main():
     mvp = torch.from_numpy(a_mvp).cuda()
     campos = torch.from_numpy(a_campos).cuda()
     light_pos = torch.from_numpy(a_lightpos).cuda()
+        
+
+    
     ###
     optimizer = torch.optim.Adam([trainable_mesh.v_pos,
                                   trainable_material.diffuse_texture.data,
@@ -57,7 +60,7 @@ def main():
                                   trainable_material.nrm.data
 
                                   ], lr=1e-3)
-    writer = SummaryWriter('./output/tensorboard')
+    # writer = SummaryWriter('./output/tensorboard')
     trainer = Trainer(trainable_go)
     for current_iter in trange(args.iter):
         ###########random camera_pos###############
@@ -73,7 +76,7 @@ def main():
        
         inference_image = trainer(mvp, campos, light_pos, light_power)
         loss = torch.nn.functional.mse_loss(ref_image, inference_image)
-        writer.add_scalar("tag", loss, global_step=None, walltime=None)
+        # writer.add_scalar("tag", loss, global_step=None, walltime=None)
         # writer.add_graph(trainer)
         optimizer.zero_grad()
         loss.backward(retain_graph=True)

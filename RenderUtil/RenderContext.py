@@ -2,7 +2,7 @@ import nvdiffrast.torch as dr
 import torch
 
 from RenderUtil import BSDF
-from RenderUtil import Render_Util
+from RenderUtil import Render_Util, EnvMap
 
 
 # from cvtest import mycvtest
@@ -44,8 +44,10 @@ class RenderContext:
         alpha = diffuse[..., 3:4] if diffuse.shape[-1] == 4 else torch.ones_like(diffuse[..., 0:1])
 
         diffuse = diffuse[..., 0:3]
-
-        result = BSDF.bsdf_pbr(diffuse, arm_texture, pos, nrm, view_pos, light_pos) * light_power
+        if False:
+            result = EnvMap.EnvLight.shade(pos, nrm, arm_texture, diffuse, view_pos, light_pos)
+        else:
+            result = BSDF.bsdf_pbr(diffuse, arm_texture, pos, nrm, view_pos, light_pos) * light_power
         return torch.cat((result, alpha), dim=-1)
 
     def rasterize(self, gameobject, mvp, width, height, view_pos, light_pos, light_power, num_layers=1):
@@ -60,11 +62,13 @@ class RenderContext:
                                                           value=1.0),
                                   torch.transpose(mvp, 1, 2))
 
+       
+
         with dr.DepthPeeler(self.context,
                             v_pos_clip,
                             fixed_mesh.pos_faces.int(),
                             [width, height]) as peeler:
-            data = torch.tensor([],device='cuda')
+            data = torch.tensor([], device='cuda')
             for _ in range(num_layers):
                 rast, rast_dp = peeler.rasterize_next_layer()
                 data = torch.cat([data, self.render_single_layer(rast,

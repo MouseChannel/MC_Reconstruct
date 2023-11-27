@@ -7,13 +7,60 @@ from RenderUtil import Render_Util, BSDF
 
 
 class EnvLight:
+    LUT = None
+    irradiance_cubemap = None
+    skybox = None
     def __init__(self):
         return;
 
-    def reflect(self, insert, normal):
-        return 2 * torch.dot(-insert, normal) * normal + insert
+    @staticmethod
+    def reflect(insert, normal):
 
-    def shade(self, v_pos, normals, kd, ks, albedo, view_pos, light_pos, LUT, irradiance_cubemap, skybox):
+        return 2 * EnvLight.mat_dot(-insert, normal) * normal + insert
+
+    @staticmethod
+    def name(s):
+        if s == 0:
+            return "right"
+        elif s == 1:
+            return "left"
+        elif s == 2:
+            return "top"
+        elif s == 3:
+            return "bottom"
+        elif s == 4:
+            return "forward"
+        elif s == 5:
+            return "backward"
+
+    @staticmethod
+    def read_skybox(path):
+        res = torch.Tensor()
+        for i in range(6):
+            cur_name = EnvLight.name(i)
+
+            cur = imageio.imread(path + '/' + cur_name + '.png')
+            cur = torch.from_numpy(cur)
+            res = torch.cat([res, cur[None, ...]], 0)
+        return res.cuda()
+
+    @staticmethod
+    def mat_dot(a, b):
+        return (a * b).sum(-1).unsqueeze(-1)
+
+    @staticmethod
+    def shade(v_pos, normals, ks, albedo, view_pos, light_pos, LUT=None, irradiance_cubemap=None, skybox=None):
+        if EnvLight.LUT is None:
+            EnvLight.LUT = imageio.imread('rainforest_trail_4k_LUT.png')
+            EnvLight.LUT = torch.from_numpy(EnvLight.LUT).float().cuda()
+        if EnvLight.irradiance_cubemap is None:
+            EnvLight.irradiance_cubemap = EnvLight.read_skybox(
+                '/home/mocheng/project/RECONSTRCUT/MC_Reconstruct/cubemap/irradiance')
+            if EnvLight.irradiance_cubemap.shape[-1] == 4:
+                EnvLight.irradiance_cubemap = EnvLight.irradiance_cubemap[..., :-1]
+        if EnvLight.skybox is None:
+            EnvLight.skybox = EnvLight.read_skybox('/home/mocheng/project/RECONSTRCUT/MC_Reconstruct/cubemap/skybox')
+
         roughness = ks[..., 1:2]  # y component
         metallic = ks[..., 2:3]  # z component
         # spec_col = (1.0 - metallic) * 0.04 + kd * metallic
@@ -24,38 +71,59 @@ class EnvLight:
         V = Render_Util.safe_normalize(view_pos - v_pos)
         L = Render_Util.safe_normalize(light_pos - v_pos)
         H = Render_Util.safe_normalize(V + L)
+        V = V.squeeze(0)
+        H = H.squeeze(0)
 
-        F0 = torch.tensor(0.04)
-        F = BSDF.bsdf_fresnel_shlick(F0, 1, torch.max(torch.dot(V, H), 0.), F0)
-        torch.lerp(F0, albedo, metallic)
+        cosTheta = EnvLight.mat_dot(V, H)
+
+        F0 = torch.tensor(0.04).cuda()
+        F0 = torch.lerp(F0, albedo, metallic)
+        F = BSDF.bsdf_fresnel_shlick(F0, 1, cosTheta)
         KS = F
         KD = torch.tensor(1) - KS
-        irradiance = dr.texture(irradiance_cubemap, normals, boundary_mode='cube')
+
+        irradiance = dr.texture(EnvLight.irradiance_cubemap[None, ...].contiguous(),
+                                normals.contiguous(),
+                                filter_mode='linear',
+                                boundary_mode='cube')
         diffuse = albedo * irradiance
-        dir = reflect(-V, normals)
-        prefilteredColor = dr.texture(skybox, dir, boundary_mode='cube')
-        lut_uv = torch.max(torch.dot(normals, V), 0.)
-        lut_uv = roughness
-        brdf = dr.texture(LUT, lut_uv, filter_mode='liner')
+        diffuse = albedo
+        dir = EnvLight.reflect(-V, normals)
+        prefilteredColor = dr.texture(EnvLight.skybox[None, ...], dir, filter_mode='linear', boundary_mode='cube')
+        # lut_uv =  torch.max(torch.dot(normals, V), 0.)
+        # lut_uv = EnvLight.mat_dot(normals, V)
+        # 
+        # lut_uv = roughness
+        lut_uv = torch.cat([EnvLight.mat_dot(normals, V),roughness],-1)
+        brdf = dr.texture(EnvLight.LUT[None,...], lut_uv, filter_mode='linear')
+        brdf = brdf /255
         
-        specular = prefilteredColor * (F0 * brdf.r + brdf.g)
+        # F0 * 
+        specular = prefilteredColor * (F0 * brdf[...,:1] + brdf[...,1:2])
         return KD * diffuse + specular
 
     @staticmethod
     def to_faces(hdr_path):
         def cube_to_dir(s, x, y):
             if s == 0:
-                rx, ry, rz = torch.ones_like(x), -y, -x
+                # right
+                rx, ry, rz = -torch.ones_like(x), -y, -x
             elif s == 1:
-                rx, ry, rz = -torch.ones_like(x), -y, x
+                # left
+                rx, ry, rz = torch.ones_like(x), -y, x
             elif s == 2:
-                rx, ry, rz = x, torch.ones_like(x), y
+                # top
+                rx, ry, rz = -x, torch.ones_like(x), y
             elif s == 3:
-                rx, ry, rz = x, -torch.ones_like(x), -y
+                # bottom
+                rx, ry, rz = -x, -torch.ones_like(x), -y
             elif s == 4:
-                rx, ry, rz = x, -y, torch.ones_like(x)
+                # forward
+                rx, ry, rz = -x, -y, torch.ones_like(x)
             elif s == 5:
-                rx, ry, rz = -x, -y, -torch.ones_like(x)
+                # backward
+                rx, ry, rz = x, -y, -torch.ones_like(x)
+
             return torch.stack((rx, ry, rz), dim=-1)
 
         res = [512, 512]
@@ -75,29 +143,24 @@ class EnvLight:
             cubemap[s, ...] = dr.texture(image[None, ...], texcoord[None, ...], filter_mode='linear')[0]
         return cubemap
 
+    @staticmethod
+    def render_gameobject(gameobject, mvp, width, height, view_pos):
+        mesh = gameobject.mesh
+        fixed_mesh = gameobject.center_by_reference(mesh, mesh.aabb())
+        points = fixed_mesh.v_pos[None, ...]
 
-# context = dr.RasterizeCudaContext();
-# context.
-# adasd =  torch.nn.functional.normalize(torch.tensor([0.5,0.5,0.5]))
-# a = EnvLight.to_faces('/home/mocheng/project/RECONSTRCUT/MC_Reconstruct/aerodynamics_workshop_2k.hdr')
+        v_pos_clip = torch.matmul(torch.nn.functional.pad(points,
+                                                          pad=(0, 1),
+                                                          mode='constant',
+                                                          value=1.0),
+                                  torch.transpose(mvp, 1, 2))
+
+        EnvLight.shade(v_pos_clip)
+
+# cube = EnvLight.to_faces('/home/mocheng/project/RECONSTRCUT/MC_Reconstruct/rainforest_trail_4k.hdr')
 # for i in range(6):
-#     temp = a[i]
-#     temp = temp.cpu().byte()
-#     # temp = temp.astype(np.char) 
-#     alpha = torch.ones(temp.shape[0], temp.shape[1], 1).byte() * 255
-#     # temp = torch.from_numpy(temp)
-#     temp = torch.cat([temp, alpha], -1)
-#     imageio.imwrite(str(i) + '.png', temp.numpy())
-# sd = 1;
-
-aa = torch.tensor([1, 2, 3])
-bb = torch.tensor([1, 2, 3])
-aaaa = torch.dot(aa, bb)
-
-
-def reflect(insert, normal):
-    return 2 * torch.dot(-insert, normal) * normal + insert
-
-
-aaaa = reflect(-torch.tensor([0.5, 1.5, 1.]), torch.tensor([0., 0., 1.]))
-qw = 1
+#     tmp = cube[i].cpu()
+#     # tmp = torch.cat([tmp, torch.ones(512, 512, 1)*255], -1).numpy()
+#     tmp = tmp.numpy()
+#     imageio.imwrite("/home/mocheng/project/RECONSTRCUT/MC_Reconstruct/cubemap/skybox/" + EnvLight.name(i) + '.png',
+#                     tmp.astype(np.uint8))

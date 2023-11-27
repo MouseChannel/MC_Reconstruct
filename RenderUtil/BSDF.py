@@ -34,8 +34,8 @@ def bsdf_masking_smith_ggx_correlated(alphaSqr, cosThetaI, cosThetaO):
 
 
 def bsdf_fresnel_shlick(f0, f90, cosTheta):
-    _cosTheta = torch.clamp(cosTheta, min=specular_epsilon, max=1.0 - specular_epsilon)
-    return f0 + (f90 - f0) * (1.0 - _cosTheta) ** 5.0
+    # _cosTheta = torch.clamp(cosTheta, min=specular_epsilon, max=1.0 - specular_epsilon)
+    return f0 + (f90 - f0) * (1.0 - cosTheta) ** 5.0
 
 
 def bsdf_pbr_specular(col, nrm, wo, wi, alpha, min_roughness=0.08):
@@ -74,7 +74,7 @@ def bsdf_pbr(kd, arm, pos, nrm, view_pos, light_pos, min_roughness=0.08):
 
     diffuse = kd * bsdf_lambert(nrm, wi)
     specular = bsdf_pbr_specular(ks, nrm, wo, wi, roughness * roughness, min_roughness=min_roughness)
-    return diffuse + specular
+    return kd + specular
 
 
 def _perturb_normal(perturbed_nrm, smooth_nrm, smooth_tng, opengl):
